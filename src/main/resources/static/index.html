@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Placement Management</title>
+  <style>
+    body{font-family:Arial,Helvetica,sans-serif;background:#0b1220;color:#e6edf3;margin:0;padding:24px}
+    .container{max-width:1100px;margin:0 auto}
+    h1{margin:0 0 16px;font-size:22px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    @media (max-width:900px){.grid{grid-template-columns:1fr}}
+    .card{background:#111b2e;border:1px solid #22314f;border-radius:12px;padding:16px}
+    label{display:block;font-size:12px;color:#a7b3d1;margin-top:10px}
+    input{width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2b3a5a;background:#0d1527;color:#e6edf3;box-sizing:border-box;margin-top:6px}
+    button{margin-top:14px;padding:10px 14px;border-radius:10px;border:0;background:#3b82f6;color:white;cursor:pointer;font-weight:600}
+    button.secondary{background:#475569}
+    button.danger{background:#ef4444}
+    table{width:100%;border-collapse:collapse;margin-top:8px}
+    th,td{border-bottom:1px solid #22314f;padding:10px 8px;text-align:left;font-size:13px}
+    th{color:#a7b3d1;font-weight:700}
+    .row-actions button{margin:0 6px 0 0;padding:6px 10px;font-size:12px;border-radius:8px}
+    .muted{color:#a7b3d1;font-size:12px;margin-top:8px}
+    .status{margin-top:12px;padding:10px 12px;border-radius:10px;border:1px solid #22314f;background:#0d1527;min-height:40px}
+    a{color:#93c5fd}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Placement Management (CRUD)</h1>
+    <div class="grid">
+      <div class="card">
+        <h2 style="margin:0 0 10px;font-size:16px">Add / Update</h2>
+
+        <label>ID (required for Update/Delete)</label>
+        <input id="id" type="number" placeholder="e.g. 1" />
+
+        <label>Name</label>
+        <input id="name" type="text" placeholder="e.g. John" />
+
+        <label>College (LocalDate: YYYY-MM-DD)</label>
+        <input id="college" type="date" />
+
+        <label>Qualification</label>
+        <input id="qualification" type="text" placeholder="e.g. B.Tech" />
+
+        <label>Year</label>
+        <input id="year" type="number" placeholder="e.g. 2025" />
+
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <button onclick="addPlacement()">Add</button>
+          <button class="secondary" onclick="updatePlacement()">Update</button>
+          <button class="danger" onclick="deletePlacement()">Delete</button>
+        </div>
+
+        <div class="muted">All endpoints come from backend:<br/>
+          <a href="#" onclick="event.preventDefault();fetchAll();">/getplacement</a>,
+          <a href="#" onclick="event.preventDefault();">/addplacement</a>,
+          <a href="#" onclick="event.preventDefault();">/updateplacement</a>,
+          <a href="#" onclick="event.preventDefault();">/deleteplacement/{id}</a>
+        </div>
+
+        <div id="status" class="status">Ready.</div>
+      </div>
+
+      <div class="card">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
+          <h2 style="margin:0;font-size:16px">Placements</h2>
+          <button class="secondary" style="margin-top:0" onclick="fetchAll()">Refresh</button>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th style="width:70px">ID</th>
+              <th>Name</th>
+              <th>College</th>
+              <th>Qualification</th>
+              <th style="width:90px">Year</th>
+              <th style="width:180px">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const API_BASE = '';
+
+  const $ = (id) => document.getElementById(id);
+
+  function readForm(includeId=false){
+    const id = $('id').value.trim();
+    const name = $('name').value.trim();
+    const college = $('college').value; // YYYY-MM-DD
+    const qualification = $('qualification').value.trim();
+    const year = $('year').value.trim();
+
+    if(!name) throw new Error('Name is required');
+    if(!college) throw new Error('College date is required');
+    if(!qualification) throw new Error('Qualification is required');
+    if(!year) throw new Error('Year is required');
+
+    const payload = {
+      name,
+      college,
+      qualification,
+      year: Number(year)
+    };
+    if(includeId){
+      if(!id) throw new Error('ID is required');
+      payload.id = Number(id);
+    }
+    return payload;
+  }
+
+  function setStatus(msg, isError=false){
+    const el = $('status');
+    el.style.borderColor = isError ? '#ef4444' : '#22314f';
+    el.style.background = isError ? '#3b0a10' : '#0d1527';
+    el.textContent = msg;
+  }
+
+  async function api(path, options){
+    const res = await fetch(API_BASE + path, {
+      headers: { 'Content-Type': 'application/json', ...(options?.headers||{}) },
+      ...options
+    });
+    if(!res.ok){
+      const text = await res.text().catch(()=> '');
+      throw new Error(`HTTP ${res.status} ${res.statusText}${text ? ' - ' + text : ''}`);
+    }
+    return res.json().catch(()=>null);
+  }
+
+  async function addPlacement(){
+    try{
+      setStatus('Adding...');
+      const payload = readForm(false);
+      const created = await api('/addplacement', { method:'POST', body: JSON.stringify(payload) });
+      if(created && created.id != null) $('id').value = created.id;
+      setStatus('Added successfully.');
+      await fetchAll();
+    }catch(e){ setStatus(e.message, true); }
+  }
+
+  async function updatePlacement(){
+    try{
+      setStatus('Updating...');
+      const payload = readForm(true);
+      await api('/updateplacement', { method:'PUT', body: JSON.stringify(payload) });
+      setStatus('Updated successfully.');
+      await fetchAll();
+    }catch(e){ setStatus(e.message, true); }
+  }
+
+  async function deletePlacement(){
+    try{
+      setStatus('Deleting...');
+      const id = $('id').value.trim();
+      if(!id) throw new Error('ID is required');
+      await api('/deleteplacement/' + encodeURIComponent(id), { method:'DELETE' });
+      setStatus('Deleted successfully.');
+      $('id').value='';
+      await fetchAll();
+    }catch(e){ setStatus(e.message, true); }
+  }
+
+  function fillForm(p){
+    $('id').value = p.id ?? '';
+    $('name').value = p.name ?? '';
+    $('college').value = p.college ?? '';
+    $('qualification').value = p.qualification ?? '';
+    $('year').value = p.year ?? '';
+  }
+
+  async function fetchAll(){
+    try{
+      setStatus('Loading...');
+      const data = await api('/getplacement', { method:'GET' });
+      const rows = $('rows');
+      rows.innerHTML = '';
+      if(!Array.isArray(data) || data.length === 0){
+        rows.innerHTML = `<tr><td colspan="6" style="color:#a7b3d1">No records</td></tr>`;
+        setStatus('No records.');
+        return;
+      }
+
+      for(const p of data){
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${p.id}</td>
+          <td>${p.name ?? ''}</td>
+          <td>${p.college ?? ''}</td>
+          <td>${p.qualification ?? ''}</td>
+          <td>${p.year ?? ''}</td>
+          <td class="row-actions">
+            <button onclick="loadOne(${p.id})">Load</button>
+            <button class="secondary" onclick="prefillAndDelete(${p.id})">Delete</button>
+          </td>
+        `;
+        rows.appendChild(tr);
+      }
+      setStatus(`Loaded ${data.length} record(s).`);
+    }catch(e){ setStatus(e.message, true); }
+  }
+
+  async function loadOne(id){
+    try{
+      setStatus('Fetching item...');
+      const p = await api('/getplacement/' + encodeURIComponent(id), { method:'GET' });
+      fillForm(p);
+      setStatus('Loaded item.');
+    }catch(e){ setStatus(e.message, true); }
+  }
+
+  async function prefillAndDelete(id){
+    $('id').value = id;
+    await deletePlacement();
+  }
+
+  // initial load
+  fetchAll();
+</script>
+</body>
+</html>
+
